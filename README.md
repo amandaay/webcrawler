@@ -14,9 +14,9 @@ We have first created a class according to [html parser library](https://docs.py
 - We commented out sys.argv[1] and sys.argv[2], so we can test in console first.
 ### You must also include a breakdown of who worked on what part(s) of the code. Also, give us the steps on how to run your code.
 - Each of us started our own research and finished 80% of the code. Then we met at a zoom meeting to discuss errors and issues we encountered. And finalized the project with the remaining 20%.
-- Amanda @amandaay: mainly focused on writing the html parser class, receiver function
-- Wayne @Chun-Wei-Tseng: mainly focused on get request function, cookie jar
-- Jason @JasonKTChen: mainly focused on login_user, start_crawling and main
+- [Amanda](https://github.com/amandaay) @amandaay: mainly focused on writing the html parser class, receiver function
+- [Wayne](https://github.com/Chun-Wei-Tseng) @Chun-Wei-Tseng: mainly focused on get request function, cookie jar
+- [Jason](https://github.com/JasonKTChen) @JasonKTChen: mainly focused on login_user, start_crawling and main
 
 
 ## Team's Terminal URL execution
