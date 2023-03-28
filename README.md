@@ -1,5 +1,5 @@
 # Webcrawler Project
-## Author: Amanda(NUID: 001673193), Jason(NUID: 002191724), Wayne(NUID: 002919206)
+
 ## NEU CS5700 Computer Networking
 
 ### Briefly describe your high-level approach (all steps involved in logging in, crawling and getting the secret Flags)
@@ -29,4 +29,7 @@ We have first created a class according to [html parser library](https://docs.py
 2. `cd` to current file
 3. `chmod +x webcrawler`
 4. `./webcrawler` username password
+
+## Contributors/Author
+Amanda @amandaay , Jason @JasonKTChen , Wayne
 
