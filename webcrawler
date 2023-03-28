@@ -1,0 +1,336 @@
+#!/usr/bin/env python3
+
+import socket
+import sys
+import ssl
+from collections import deque
+from html.parser import HTMLParser
+
+# use a data structure to track unique URLs already crawled
+visitURLs = set()
+# use a data structure to track URLs to be crawled
+unVisitURLs = deque([])
+# use a data structure to store unique secret flags found in the pages
+secretFlags = set()
+
+
+class FakebookHTMLParser(HTMLParser):
+    """
+    The FakebookHTMLParser extends the HTML Parser to parse through the server response for tags in search of
+    more URLs and/or secret flags respectively.
+
+    You can write code for the following tasks
+
+    - look for the links in the HTML code that you will need to crawl, next.
+
+    - look for the secret flags among tags, and process them
+
+    - look for the csrfmiddlewaretoken, and process it.
+    """
+
+    # constructor
+    def __init__(self):
+        super().__init__()
+        self.csrf_middleware_token = None
+        self.capture_secret_flag = False
+
+    def handle_starttag(self, tag, attrs):
+        # Search for URLs in the href attribute of <a> tags
+        if tag == 'a':
+            for name, value in attrs:
+                if name == "href":
+                    if value is not None and value.startswith("/fakebook/"):
+                        if value not in visitURLs:
+                            unVisitURLs.append(value)
+        #  handle secret flag
+        elif tag == "h2":
+            if attrs:
+                if attrs[0] == ("class", "secret_flag") and attrs[1] == ("style", "color:red"):
+                    self.capture_secret_flag = True
+        # Search for CSRF middleware token in the value attribute of <input> tags
+        elif tag == 'input':
+            for attr in attrs:
+                if attr[0] == 'name' and attr[1] == 'csrfmiddlewaretoken':
+                    self.csrf_middleware_token = attrs[2][1]
+
+    # # search for secret flags in the HTML response
+    def handle_data(self, data):
+        if self.capture_secret_flag:
+            data = data.strip()
+            if data.startswith('FLAG'):
+                data = data[len('FLAG: '):]
+                if data.isalnum() and len(data) == 64:
+                    secretFlags.add(data)
+                    print(f"Found flag: {data}")
+                    # reset capture secret flag
+                    self.capture_secret_flag = False
+
+def parse_cmd_line():
+    username = ""
+    password = ""
+
+    try:
+        username = sys.argv[1]
+        password = sys.argv[2]
+        return username, password
+
+    except:
+        if username == "":
+            sys.exit("Please provide appropriate user name.")
+        if password == "":
+            sys.exit("Please provide appropriate password.")
+
+
+def create_socket():
+    """Creates a TLS wrapped socket to create a connection to http server. """
+    port = 443
+    host_name = 'project2.5700.network'
+
+    # building connection
+    try:
+        context = ssl.create_default_context()
+        sock = socket.create_connection((host_name, port))
+        wrapped_socket = context.wrap_socket(sock, server_hostname='project2.5700.network')
+        return wrapped_socket
+    except socket.error:
+        sys.exit("Connection error.")
+
+
+# this function will help you send the get request
+def send_get_request(path, sock, host, cookie1=None, cookie2=None):
+    """
+    write code to send request along with appropriate header fields, and handle cookies. Send this header
+    file to the server using socket
+
+    """
+    request = f"GET {path} HTTP/1.1\r\n"
+    request += f"{host}\r\n"
+
+    if cookie1 is not None:
+        session_id = cookie1
+    else:
+        session_id = ""
+
+    if cookie2 is not None:
+        csrf_token = cookie2
+    else:
+        csrf_token = ""
+
+    request += f"Cookie: csrftoken={csrf_token}; sessionid={session_id}\r\n"
+    request += "\r\n"
+    try:
+        # Send request
+        sock.send(request.encode("utf-8"))
+
+    except:
+        print("Error occurred while sending request.")
+        sys.exit()
+
+
+# this function will help you to receive message from the server for any request sent by the client
+def receive_msg(sock):
+    """
+        Receive the message in a loop based on the content length
+        given in the header
+        """
+    html_page = b""
+    while True:
+        data = sock.recv(4096)
+        if not data:
+            break
+        html_page += data
+        if b"\r\n\r\n" in html_page:
+            break
+
+    status_code = None
+    status_msg = None
+    location = None
+
+    if b'\r\n\r\n' in html_page:
+        headers, content = html_page.split(b'\r\n\r\n', 1)
+        # Parse the HTTP status code, status message and location from the headers
+        headers = headers.decode('utf-8')
+        header_lines = headers.split('\r\n')
+        status_line = header_lines[0]
+        if len(status_line.split(' ')) == 3:
+            status_line, status_code, status_msg = status_line.split(' ')
+        for line in header_lines[1:]:
+            if line[:len('Location:')] == 'Location:':
+                location = line[len('Location:') + 1:]
+                break
+        headers = headers.encode('utf-8')
+    else:
+        headers, content = html_page, b''
+
+    return headers, content, html_page, status_code, status_msg, location
+
+
+def getContent_length(msg):
+    """Extracts the content length of the URL"""
+    content_length = 0
+    headers, body = msg.split(b"\r\n\r\n", 1)
+    for header in headers.split(b"\r\n"):
+        if header.startswith(b"Content-Length:"):
+            content_length = int(header.split(b":")[1])
+            break
+    return content_length
+
+
+# this function will help you to extract cookies from the response message
+def cookie_jar(headers):
+    """
+    Stores the session and/or the csrf cookies
+    return cookies
+    """
+    cookies = {}
+    for header in headers.split(b"\r\n"):
+        if header.startswith(b"Set-Cookie:"):
+            cookie = header.split(b";")[0].split(b": ")[1]
+            key, value = cookie.split(b"=")
+            cookies[key.decode("utf-8")] = value.decode("utf-8")
+    return cookies
+
+
+# this function will help you to send the request to login
+def login_user(sock, path, host, body_len, body, session_id, csrf_cookie):
+    """
+    create a request and send it to login to the fakebook site
+    """
+
+    request = f"POST {path} HTTP/1.1\r\n"
+    request += f"{host}\r\n"
+    request += f"Content-Type: application/x-www-form-urlencoded\r\n"
+    request += f"Content-Length: {body_len}\r\n"
+    request += f"Cookie: csrftoken={csrf_cookie}; sessionid={session_id}\r\n"
+    request += f"\r\n"
+    request += f"{body}"
+    try:
+        # Send request
+        sock.send(request.encode('utf-8'))
+
+    except Exception as e:
+        print("Error occurred while sending request:", e)
+
+
+def start_crawling(msg, sock, host, cookie3, cookie4):
+    """
+    Implements the basic web crawler for this program.
+    You can use the HTML Parser object to parse through the current URL in search for more URLs and/or secret flags until all
+    secret flags are found for the user.
+    Also accounts for and appropriately handles different errors received when parsing through pages.
+    """
+    while unVisitURLs:
+        current = unVisitURLs.popleft()
+        if current not in visitURLs:
+            send_get_request(current, sock, host, cookie3, cookie4)
+            result, header, body, status_code, status_message, location = receive_msg(sock)
+            parser = FakebookHTMLParser()
+            parser.feed(body.decode('utf-8'))
+            visitURLs.add(current)
+        if len(secretFlags) >= 5:
+            break
+
+
+def main():
+    host = "Host: project2.5700.network"
+    root_path = "/"
+    fakebook = "/fakebook/"
+    login_path = "/accounts/login/"
+
+    # Parse the username and password from the command line
+    username, password = parse_cmd_line()
+
+    # Create TLS wrapped socket
+    sock = create_socket()
+
+    # get the root page
+    send_get_request(root_path, sock, host)
+
+    # Receive response
+    msg_rootPage_header, msg_rootPage_content, html_page, status_code, status_msg, location = receive_msg(sock)
+
+    # check the received message
+    if msg_rootPage_header.startswith(b"HTTP/1.1 200 OK"):
+        print("Connection established with server")
+    else:
+        print("Error establishing connection")
+        return
+
+    # store session cookie
+    cookies = cookie_jar(msg_rootPage_header)
+
+    # send get request for login page
+    send_get_request(login_path, sock, host, cookies.get('sessionid'), cookies.get('csrftoken'))
+
+    # Receive response
+    msg_loginPage_header, msg_loginPage_content, html_page, status_code, status_msg, location = receive_msg(sock)
+
+    # check message for login page
+    if msg_loginPage_header.startswith(b"HTTP/1.1 200 OK"):
+        print("Login page retrieved")
+    else:
+        print("Error retrieving login page")
+        return
+
+    # retrieving csrf cookie and middleware token
+    csrf_token = cookies.get("csrftoken")
+    sessionid = cookies.get("sessionid")
+
+    # create a new parser object
+    parser = FakebookHTMLParser()
+
+    # parse the server response
+    parser.feed(msg_loginPage_content.decode('utf-8'))
+
+    # extract the csrfmiddlewaretoken and middlewaretoken values from the response
+    middleware_token = parser.csrf_middleware_token
+
+    # creating login body for user
+    login_body = f"username={username}&password={password}&csrfmiddlewaretoken={middleware_token}&next={fakebook}"
+    login_body_len = len(login_body)
+
+    # login user
+    login_user(sock, login_path, host, login_body_len, login_body, sessionid, csrf_token)
+
+    # Receive response
+    msg_loginUser_header, msg_loginUser_content, html_page, status_code, status_msg, location = receive_msg(sock)
+
+    login_successful = False
+
+    # check message for login user
+    if msg_loginUser_header.startswith(b"HTTP/1.1 302 Found"):
+        print("User logged in successfully")
+        login_successful = True
+    else:
+        print("Error logging in user")
+        return
+
+    if login_successful:
+        # Retrieve newly refreshed csrf_token and sessionid after login
+        cookies = cookie_jar(msg_loginUser_header)
+        csrf_token_logined = cookies.get("csrftoken")
+        sessionid_logined = cookies.get("sessionid")
+
+        # send get request to fakebook redirect path
+        send_get_request(location, sock, host, sessionid_logined, csrf_token_logined)
+
+        # Receive response
+        msg_logined_header, msg_logined_content, full_page, status_code, status_message, location = receive_msg(sock)
+
+        # Parse the page to get initial crawlable URLs
+        parser_login = FakebookHTMLParser()
+        parser_login.feed(full_page.decode('utf-8'))
+
+    else:
+        print("Login in failed......")
+        return
+
+    print("start to crawl")
+    start_crawling("", sock, host, sessionid_logined, csrf_token_logined)
+
+    # close the socket - program end
+    sock.close()
+
+
+if __name__ == '__main__':
+    main()

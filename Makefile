@@ -1,0 +1,2 @@
+#Makefile.none
+none:
