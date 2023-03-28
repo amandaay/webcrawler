@@ -1,6 +1,6 @@
 # Webcrawler Project
 
-## NEU CS5700 Computer Networking
+## CS5700 Computer Networking
 
 ### Briefly describe your high-level approach (all steps involved in logging in, crawling and getting the secret Flags)
 We have first created a class according to [html parser library](https://docs.python.org/3/library/html.parser.html). We captured all the tags that will include ‘a’ tag for the urls to be crawled and make sure it will not be revisited. We also include the ‘input’ tag to search for the middleware token. Finally, we used the “handle_data” function to search for the secret flag.
@@ -24,7 +24,7 @@ We have first created a class according to [html parser library](https://docs.py
 - [Jason's screenshot](https://imgur.com/l8ULZAX)
 - [Wayne's screenshot](https://imgur.com/zHGcMUC)
 
-## Instructions to execute (Only those with NEU ID can access)
+## Instructions to execute (Only those with NUID can access)
 1. `git clone` current project
 2. `cd` to current file
 3. `chmod +x webcrawler`
