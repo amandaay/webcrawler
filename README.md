@@ -31,5 +31,5 @@ We have first created a class according to [html parser library](https://docs.py
 4. `./webcrawler` username password
 
 ## Contributors
-[Amanda](https://github.com/amandaay), [Jason](https://github.com/JasonKTChen) , [Wayne](https://github.com/Chun-Wei-Tseng)
+[Amanda Au-Yeung](https://github.com/amandaay), [Jason Chen](https://github.com/JasonKTChen) , [Wayne Tseng](https://github.com/Chun-Wei-Tseng)
 
