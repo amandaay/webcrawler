@@ -61,7 +61,7 @@ class FakebookHTMLParser(HTMLParser):
                 data = data[len('FLAG: '):]
                 if data.isalnum() and len(data) == 64:
                     secretFlags.add(data)
-                    print(f"Found flag: {data}")
+                    print(f"{data}")
                     # reset capture secret flag
                     self.capture_secret_flag = False
 
@@ -250,9 +250,7 @@ def main():
     msg_rootPage_header, msg_rootPage_content, html_page, status_code, status_msg, location = receive_msg(sock)
 
     # check the received message
-    if msg_rootPage_header.startswith(b"HTTP/1.1 200 OK"):
-        print("Connection established with server")
-    else:
+    if not msg_rootPage_header.startswith(b"HTTP/1.1 200 OK"):
         print("Error establishing connection")
         return
 
@@ -266,9 +264,7 @@ def main():
     msg_loginPage_header, msg_loginPage_content, html_page, status_code, status_msg, location = receive_msg(sock)
 
     # check message for login page
-    if msg_loginPage_header.startswith(b"HTTP/1.1 200 OK"):
-        print("Login page retrieved")
-    else:
+    if not msg_loginPage_header.startswith(b"HTTP/1.1 200 OK"):
         print("Error retrieving login page")
         return
 
@@ -299,7 +295,7 @@ def main():
 
     # check message for login user
     if msg_loginUser_header.startswith(b"HTTP/1.1 302 Found"):
-        print("User logged in successfully")
+        # User logged in successfully
         login_successful = True
     else:
         print("Error logging in user")
@@ -325,8 +321,12 @@ def main():
         print("Login in failed......")
         return
 
-    print("start to crawl")
+    # start to crawl
     start_crawling("", sock, host, sessionid_logined, csrf_token_logined)
+
+    with open("secret_flags", "w") as f:
+        for flag in secretFlags:
+            f.write(flag + "\n")
 
     # close the socket - program end
     sock.close()
